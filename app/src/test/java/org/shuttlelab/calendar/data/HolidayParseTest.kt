@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 
@@ -109,6 +110,44 @@ class HolidayParseTest {
         assertNull(Holiday.parse(""))
         assertNull(Holiday.parse("window.syncModule = {}"))
         assertNull(Holiday.parse("<html>404 Not Found</html>"))
+    }
+
+    @Test
+    fun `正则不能带未转义的右括号 —— 设备上的引擎比桌面严格`() {
+        // 这条测试是一次闪退换来的。
+        //
+        // 移植 Web 的正则时丢了 `\]` `\}` 的反斜杠。桌面 JVM 的引擎把无配对的 `]` `}` 当字面量,
+        // 于是这一整个测试类当时全绿;真机上的引擎更严格,编译 `commonBlockRe` 时抛
+        // PatternSyntaxException,而它在 object 的静态初始化里 —— 应用点开即闪退,界面都没出来。
+        //
+        // 所以这里不测"能不能编译"(在 JVM 上永远能),而是直接把设备的规则搬过来:扫描每条
+        // 正则的字符串,禁止出现未转义、且不在字符类内的 `]` 或 `}`。同一个错误再犯一次,
+        // 是这里变红,而不是用户点开闪退。
+        //
+        // EN: this test was bought with a crash. Porting the web's regexes dropped the backslashes
+        // in `\]` and `\}`. The desktop JVM treats unmatched `]` and `}` as literals, so this whole
+        // class passed; the engine on a real device is stricter and threw PatternSyntaxException
+        // while compiling commonBlockRe — inside the object's static initialiser, so the app died on
+        // launch without drawing a frame. Hence this does not test "does it compile" (on the JVM it
+        // always will) but brings the device's rule here: scan each pattern's text and forbid an
+        // unescaped `]` or `}` outside a character class. A repeat of the mistake turns this red
+        // instead of turning the app into a crash on the user's phone.
+        for (regex in Holiday.allPatterns) {
+            val pattern = regex.pattern
+            var i = 0
+            var inClass = false
+            while (i < pattern.length) {
+                val c = pattern[i]
+                when {
+                    c == '\\' -> i++ // 转义:跳过下一个字符
+                    c == '[' -> inClass = true
+                    c == ']' && inClass -> inClass = false
+                    c == ']' || c == '}' ->
+                        fail("正则 `$pattern` 的第 $i 个字符是未转义的 '$c' —— 真机上会抛 PatternSyntaxException")
+                }
+                i++
+            }
+        }
     }
 
     @Test

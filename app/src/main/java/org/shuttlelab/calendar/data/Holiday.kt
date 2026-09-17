@@ -67,15 +67,47 @@ object Holiday {
     fun monthDayKey(month: Int, day: Int): String = "$month-$day"
 
     // ---- 正则:与 Web 端 functions/api/holiday.ts 逐字相同 ----
-    private val holidayArrRe = Regex("""holiday:\s*\[([\s\S]*?)]\s*,\s*work:\s*\[""")
-    private val workArrRe = Regex("""work:\s*\[([\s\S]*?)]\s*,\s*day:\s*\{""")
-    private val commonBlockRe = Regex("""day:\s*\{\s*common:\s*\{([\s\S]*?)}\s*}\s*}""")
-    private val keyValRe = Regex("""'(\d+-\d+(?:w\d+)?)':\s*\[([\s\S]*?)]""")
+    //
+    // **右方括号和右花括号必须转义**(`\]` `\}`),即使它们在正则里"看起来"是普通字符。
+    //
+    // 这不是风格洁癖,是一次线上崩溃的结论:移植时这几个反斜杠被漏掉了,桌面 JVM 的正则引擎
+    // 容忍无配对的 `]` 和 `}`,把它们当字面量,于是单元测试全绿;而**设备上的引擎更严格**,
+    // 编译 `commonBlockRe` 时直接抛 PatternSyntaxException。那是在 object 的静态初始化里抛的,
+    // 第一次碰 Holiday 的地方就是 ExceptionInInitializerError —— 应用点开即闪退,连界面都没出来。
+    //
+    // 教训写在这里而不是提交记录里,因为下一个人只会看到"这些反斜杠好像多余"。它们不多余:
+    // 删掉它们的代价是一个跑得过全部单元测试、却在任何真机上都起不来的版本。
+    //
+    // EN: the closing bracket and brace MUST stay escaped (`\]`, `\}`) even though they look like
+    // ordinary characters here. Not pedantry — the conclusion of a crash: the backslashes were lost
+    // in the port, the desktop JVM's regex engine tolerates unmatched `]` and `}` and treats them as
+    // literals, so every unit test passed, while the ENGINE ON THE DEVICE IS STRICTER and threw
+    // PatternSyntaxException while compiling commonBlockRe. That throw happens inside the object's
+    // static initialiser, so the first touch of Holiday raised ExceptionInInitializerError and the
+    // app died on launch without ever drawing a frame. The lesson lives here rather than in a commit
+    // message because the next person will only see backslashes that look redundant. They are not:
+    // removing them buys a build that passes every unit test and starts on no real device at all.
+    private val holidayArrRe = Regex("""holiday:\s*\[([\s\S]*?)\]\s*,\s*work:\s*\[""")
+    private val workArrRe = Regex("""work:\s*\[([\s\S]*?)\]\s*,\s*day:\s*\{""")
+    private val commonBlockRe = Regex("""day:\s*\{\s*common:\s*\{([\s\S]*?)\}\s*\}\s*\}""")
+    private val keyValRe = Regex("""'(\d+-\d+(?:w\d+)?)':\s*\[([\s\S]*?)\]""")
     // 单双引号两种字面量都收。这一条不用三引号原始串:它以 " 结尾,紧接 """ 会形成
     // 歧义的引号串,普通转义串更清楚。
     // EN: accepts both quote styles. Not a raw string: this pattern ends in a quote, which would
     // run into the closing triple quote ambiguously — an escaped literal is clearer.
     private val stringItemRe = Regex("'([^']*)'|\"([^\"]*)\"")
+
+    /**
+     * 全部正则,只给 `HolidayParseTest` 的可移植性检查用 —— 它逐条断言没有未转义的 `]` / `}`。
+     * 单元测试跑在桌面 JVM 上,而桌面的引擎恰恰是**宽松的那一个**,所以"能编译"证明不了什么;
+     * 这条检查把设备上的规则搬到了 JVM 侧,让同一个错误第二次发生时是红的测试而不是闪退。
+     * EN: every pattern, exposed solely for HolidayParseTest's portability check, which asserts none
+     * of them carries an unescaped `]` or `}`. Unit tests run on the desktop JVM — the LENIENT engine
+     * — so "it compiles" proves nothing there; this brings the device's rule back to the JVM side so
+     * that a repeat of the same mistake is a red test rather than a crash on launch.
+     */
+    internal val allPatterns: List<Regex>
+        get() = listOf(holidayArrRe, workArrRe, commonBlockRe, keyValRe, stringItemRe)
 
     /** 从 JS 数组字面量文本里取出字符串项:" 'a', 'b' " → [a, b]。 */
     private fun parseJsStringArray(body: String): List<String> =
