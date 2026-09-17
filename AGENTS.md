@@ -14,13 +14,34 @@ Web 仓库在本机 `/Users/atlas/Data/shuttlelab/calendar-shuttle`;界面与配
 
 ## 构建与测试
 
+本机(atlas 的 mac)已具备完整工具链,**不要再假设"只能靠 CI 编译"**:
+
 ```sh
-./gradlew testDebugUnitTest    # 纯 JVM,不需要设备/模拟器
-./gradlew assembleDebug        # 需要 JDK 17 + Android SDK
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17      # brew 装的 JDK 17
+export ANDROID_HOME="$HOME/Library/Android/sdk"    # sdkmanager 装在 platform-tools/platforms/build-tools
+export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+
+./gradlew testDebugUnitTest    # 纯 JVM,不需要设备
+./gradlew assembleDebug        # 15MB 左右
+./gradlew assembleRelease      # 本地无密钥时回退 debug 签名,仅用于验证 lintVitalRelease
+./gradlew lintDebug            # 报告在 app/build/reports/lint-results-debug.html
 ```
 
-- **本地通常没有编译环境,CI 才是第一次真正编译的地方。** 所以提交前值得逐行看导入与类型,
-  而不是"先推上去让 CI 说"。CI 会先跑单元测试再打包,测试失败就不出包。
+`local.properties`(内含 `sdk.dir`)是 gitignore 的,换机器要自己写一份。
+
+**装到设备/模拟器上跑,是本仓库唯一能发现一整类问题的办法** —— 单元测试跑在 JVM 上,用的是
+桌面 JDK 的实现;设备上是 ART 加 ICU,正则、`java.time`、字体度量都可能表现不同。UI 更是
+只有跑起来才知道:格子放不放得下三行、深色下对比够不够、翻月会不会跳。所以"改完 UI"
+的验收标准是**在设备上看过**,不是"CI 绿了"。
+
+```sh
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb logcat -c && adb shell am start -n org.shuttlelab.calendar/.MainActivity
+adb logcat -d -s AndroidRuntime:E   # 崩溃栈
+```
+
+- CI 会先跑单元测试再打包,测试失败就不出包;另有一步断言"用例数 ≥ 10",防止测试没被发现
+  却依然绿灯。
 - 不需要任何密钥或配置文件即可构建 debug 包(与 secretary 不同,这里没有 Firebase)。
 - release 包由 tag 触发,必须有 `KEYSTORE_BASE64` 等 Secrets;缺了就失败,**不回退 debug 签名**
   (回退会产出用户装不上的包,见 `release.yml` 里的说明)。
@@ -74,7 +95,10 @@ Web 仓库在本机 `/Users/atlas/Data/shuttlelab/calendar-shuttle`;界面与配
   必须尊重 `rememberReduceMotion()`。
 - 不要为了一件小事引依赖:一个 GET 用 `HttpURLConnection`,四十行手写代码胜过一个库。
   真的需要时,先说明理由,而不是默默加上。
-- 提交信息:`feat:` / `fix:` / `docs:` / `chore:` / `ci:` + 简短祈使句。
+- **提交信息一律英文**(仓库规定,不分人机):`feat:` / `fix:` / `docs:` / `chore:` / `ci:` +
+  简短祈使句。代码注释与本文件仍是中文在前 —— 两者面向的读者不同:提交历史是给
+  GitHub 上任何路过的人看的,注释是给维护这份代码的人看的。
+- 作者身份用仓库本地配置的 `ShuttleLab <support@shuttlelab.org>`,别用个人账号覆盖。
 
 ## 脚本
 
