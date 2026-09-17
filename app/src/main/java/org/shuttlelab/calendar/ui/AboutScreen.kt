@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.shuttlelab.calendar.BuildConfig
+import org.shuttlelab.calendar.data.Holiday
 import org.shuttlelab.calendar.data.Lang
 import org.shuttlelab.calendar.ui.theme.brandPrimary
 
@@ -88,13 +89,20 @@ fun AboutScreen(vm: CalendarViewModel) {
             }
 
             AboutCard(Lang.t("Data sources", "数据来源")) {
+                // 把数据源地址原样写出来。一个日历凭什么说某天放假,用户有权核对 —— 含糊地写
+                // 「来自权威来源」是最没有信息量的一种说法。
+                // EN: state the source outright. A user is entitled to check on what authority a
+                // calendar calls a day a holiday; "from an authoritative source" says nothing.
                 Field(
                     Lang.t("Holidays (days off / make-up workdays)", "节假日(放假/补班)"),
                     Lang.t(
-                        "Follows the State Council's published arrangements, via the same source the website uses. Updated as new announcements are published.",
-                        "依据国务院公布的安排,数据源与网页版相同,随官方公布更新。",
+                        "Follows the State Council's published arrangements, fetched from the same source the website uses and updated as new announcements appear:",
+                        "依据国务院公布的安排,与网页版取自同一数据源,随官方公布更新:",
                     ),
                 )
+                TextButton(onClick = haptics.clicking { openUri(ctx, Holiday.SCRIPT_URL) }) {
+                    Text("cdn.1htr.cn/static/module/holiday.js", style = MaterialTheme.typography.bodySmall)
+                }
                 Field(
                     Lang.t("Lunar calendar, solar terms & festivals", "农历、节气与节日"),
                     Lang.t(

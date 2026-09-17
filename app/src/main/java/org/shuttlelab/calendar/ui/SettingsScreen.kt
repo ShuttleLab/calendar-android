@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import org.shuttlelab.calendar.BuildConfig
 import org.shuttlelab.calendar.data.HolidayRepo
+import org.shuttlelab.calendar.data.Prefs
 import org.shuttlelab.calendar.data.Lang
 import org.shuttlelab.calendar.ui.theme.brandPrimary
 
@@ -92,6 +93,28 @@ fun SettingsScreen(vm: CalendarViewModel) {
                         ChoiceChip(Lang.current == "en", haptics.selecting { vm.setLang("en") }, "English")
                     }
                 }
+                // 日历文字大小。**只作用于日历格子**,不是全局字号 —— 格子受七列宽度约束,
+                // 而系统字体大小是无差别放大的,那一档下三行文字会被裁掉。见 Prefs.KEY_CALENDAR_SCALE。
+                // EN: calendar text size — the day grid only, not a global scale. Cells are bound by
+                // seven fixed-width columns, whereas the system font size enlarges indiscriminately
+                // and would clip their three lines. See Prefs.KEY_CALENDAR_SCALE.
+                SettingRow(Lang.t("Calendar text size", "日历文字大小")) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val labels = listOf(
+                            Lang.t("S", "小"),
+                            Lang.t("M", "标准"),
+                            Lang.t("L", "大"),
+                            Lang.t("XL", "特大"),
+                        )
+                        Prefs.CALENDAR_SCALES.forEachIndexed { i, scale ->
+                            ChoiceChip(
+                                vm.calendarScale == scale,
+                                haptics.selecting { vm.setCalendarTextSize(scale) },
+                                labels[i],
+                            )
+                        }
+                    }
+                }
                 SettingRow(Lang.t("Theme", "主题")) {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(
@@ -142,8 +165,8 @@ fun SettingsScreen(vm: CalendarViewModel) {
             SettingsCard(Lang.t("Holiday data", "节假日数据")) {
                 Text(
                     Lang.t(
-                        "Days off and make-up workdays follow the State Council's published schedule, from the same source the website uses. It changes a few times a year, so it is cached for a week; the app ships with a snapshot so a fresh install works offline.",
-                        "放假与补班依据国务院公布的安排,数据源与网页版相同。它一年只变几次,所以缓存一周;应用内置了一份快照,首次安装离线也能用。",
+                        "Days off and make-up workdays follow the State Council's published schedule, from the same source the website uses. It changes a few times a year, so it is cached for 30 days — switching to a daily check once October arrives if next year's schedule is still missing, which is when it is normally announced. A snapshot ships with the app, so a fresh install works offline.",
+                        "放假与补班依据国务院公布的安排,数据源与网页版相同。它一年只变几次,所以缓存 30 天;次年安排通常在 11 月前后公布,若进入 10 月后数据里仍没有次年,会自动改成每天检查一次。应用内置了一份快照,首次安装离线也能用。",
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

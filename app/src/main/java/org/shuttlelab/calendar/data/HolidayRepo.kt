@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.time.LocalDate
 
 /**
  * 节假日数据的取用:网络 → 本地缓存 → 随包快照,三级兜底。
@@ -42,19 +43,42 @@ object HolidayRepo {
     private const val ASSET_FILE = "holiday.js"
 
     /**
-     * 缓存有效期 7 天。
+     * 缓存有效期:平时 30 天,**缺次年安排且已进入第四季度时缩到 1 天**。
      *
-     * 数据一年变几次,7 天已经远比它的变化频率密。取更短(比如 1 天)只是让绝大多数启动多打一次
-     * 网络请求,换不来任何更新;取更长则在年末公布次年安排后拖太久才看到。需要立刻更新的场景由
-     * 设置页的「刷新」提供 —— 那是明确的用户意图,不该靠缩短 TTL 去猜。
+     * 为什么不是一个固定值:这份数据一年只变几次,所以绝大多数时候 30 天都嫌勤快 —— 固定一个
+     * 很长的 TTL 看起来很合理。但它有一个明确的、每年都会到来的例外:国务院通常在 **11 月前后**
+     * 公布次年的放假安排,而那恰恰是全年最需要立刻拿到新数据的时刻(大家正在订票、排假)。
+     * 固定 30 天意味着最坏情况下要等到 12 月才看到明年元旦和春节的标记;固定 90 天则可能整个
+     * 假期都错过。
      *
-     * EN: a 7-day TTL. The data changes a few times a year, so a week is already far denser than
-     * its rate of change; a shorter TTL (say a day) only adds a request to most launches without
-     * finding anything new, while a much longer one delays next year's schedule after it is
-     * published. Explicit refresh lives in Settings — a stated intent, not something to guess at
-     * by shortening the TTL.
+     * 所以 TTL 由**数据自己**决定:看缓存里有没有次年的日期。没有、且当前已是 10 月之后,就认为
+     * "正等着那次公布",每天问一次;其余时候 30 天。这样既没有把 365 天的等待写死,也没有为了
+     * 一年一次的更新让所有人天天联网 —— 而且它不需要任何人记得在某个月改一次常量。
+     *
+     * EN: a 30-day TTL, dropping to one day when the cache holds no dates for next year and the
+     * fourth quarter has begun. Not a single constant, because this data has one predictable
+     * exception each year: next year's schedule is published around November, exactly when it is
+     * most wanted (people are booking travel). A flat 30 days can leave someone without next
+     * January's marks until December, and a flat 90 days can miss the holiday entirely. So the TTL
+     * is decided by the DATA: if the cache has nothing for next year and it is past October, assume
+     * we are waiting for that announcement and ask daily; otherwise 30 days. No 365-day wait baked
+     * in, no daily request for everyone all year, and nothing for anyone to remember to change.
      */
-    private const val TTL_MILLIS = 7L * 24 * 60 * 60 * 1000
+    private const val TTL_NORMAL = 30L * 24 * 60 * 60 * 1000
+    private const val TTL_AWAITING_NEXT_YEAR = 24L * 60 * 60 * 1000
+
+    /** 缓存里是否已经有次年的放假日期。 */
+    private fun coversNextYear(data: Holiday.Data): Boolean {
+        val nextYear = LocalDate.now().year + 1
+        return data.holidays.any { it.startsWith("$nextYear-") }
+    }
+
+    private fun ttlFor(data: Holiday.Data): Long =
+        if (!coversNextYear(data) && LocalDate.now().monthValue >= 10) {
+            TTL_AWAITING_NEXT_YEAR
+        } else {
+            TTL_NORMAL
+        }
 
     /** 数据来源,给界面提示用。 */
     enum class Source { NETWORK, CACHE, BUNDLED, NONE }
@@ -73,11 +97,16 @@ object HolidayRepo {
      * take the page down with it.
      */
     suspend fun load(ctx: Context, force: Boolean = false): Loaded = withContext(Dispatchers.IO) {
+        // 先解析缓存,再判断它是否还新鲜 —— 顺序不能反:有效期取决于**缓存里有什么**
+        // (见 [ttlFor]),没解析之前无从判断。
+        // EN: parse the cache before judging its freshness — the TTL depends on WHAT IS IN IT
+        // ([ttlFor]), which cannot be known before parsing.
         val cached = readCache(ctx)
-        val fresh = cached != null && !force &&
-            System.currentTimeMillis() - cached.second < TTL_MILLIS
-        if (fresh) {
-            Holiday.parse(cached!!.first)?.let { return@withContext Loaded(it, Source.CACHE) }
+        val cachedData = cached?.let { Holiday.parse(it.first) }
+        if (cachedData != null && !force &&
+            System.currentTimeMillis() - cached.second < ttlFor(cachedData)
+        ) {
+            return@withContext Loaded(cachedData, Source.CACHE)
         }
 
         fetch()?.let { script ->
@@ -90,9 +119,7 @@ object HolidayRepo {
         // 联网失败/解析失败:用缓存,哪怕过期 —— 去年的放假安排也远胜于一片空白。
         // EN: network or parse failed — use the cache even when stale; last year's schedule beats
         // a blank calendar.
-        cached?.let { Holiday.parse(it.first) }?.let {
-            return@withContext Loaded(it, Source.CACHE)
-        }
+        if (cachedData != null) return@withContext Loaded(cachedData, Source.CACHE)
         readAsset(ctx)?.let { Holiday.parse(it) }?.let {
             return@withContext Loaded(it, Source.BUNDLED)
         }

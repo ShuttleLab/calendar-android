@@ -3,12 +3,6 @@ package org.shuttlelab.calendar.ui
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -37,15 +31,22 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +88,7 @@ fun MonthCalendar(vm: CalendarViewModel) {
     val haptics = rememberHaptics(vm)
     val reduceMotion = rememberReduceMotion()
     val month = vm.viewMonth
+    val scale = vm.calendarScale
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // ---- 月份导航 ----
@@ -115,7 +117,7 @@ fun MonthCalendar(vm: CalendarViewModel) {
         }
 
         // ---- 星期表头 ----
-        WeekdayHeader()
+        WeekdayHeader(scale)
 
         // ---- 格子 ----
         // 翻月时整块网格横向滑动:方向来自 [CalendarViewModel.monthDelta],所以"往后翻"和
@@ -221,7 +223,7 @@ private fun monthTitle(month: YearMonth): String =
  * without it, a block of yellow cells reads as randomly marked.
  */
 @Composable
-private fun WeekdayHeader() {
+private fun WeekdayHeader(scale: Float) {
     val labels = if (Lang.isZh) {
         listOf("一", "二", "三", "四", "五", "六", "日")
     } else {
@@ -234,7 +236,8 @@ private fun WeekdayHeader() {
                 label,
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.labelMedium,
+                fontSize = (BASE_WEEKDAY_SP * scale).sp,
+                fontWeight = FontWeight.Medium,
                 color = if (weekend) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -248,6 +251,7 @@ private fun WeekdayHeader() {
 /** 6×7 的格子。 */
 @Composable
 private fun MonthGrid(vm: CalendarViewModel, month: YearMonth) {
+    val cellHeight = (BASE_CELL_HEIGHT * vm.calendarScale).dp
     val first = month.atDay(1)
     // 周一起始:java 的 DayOfWeek 周一=1,所以前导空格恰好是 value-1。
     // Web 端写成 (getDay() + 6) % 7(那边周日=0),两者等价。
@@ -270,7 +274,7 @@ private fun MonthGrid(vm: CalendarViewModel, month: YearMonth) {
                         Box(
                             Modifier
                                 .weight(1f)
-                                .height(CELL_HEIGHT)
+                                .height(cellHeight)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
@@ -283,19 +287,26 @@ private fun MonthGrid(vm: CalendarViewModel, month: YearMonth) {
     }
 }
 
-/**
- * 一个格子的高度。
+/*
+ * 格子的基准尺寸,乘以设置里的「日历文字大小」得到实际值。
  *
- * 手机上七列每列不到 50dp 宽,而格子要放三行:日期数字、农历、节日。58dp 是能容下三行
- * (13sp + 9sp + 9sp)又不让六行网格把屏幕撑破的那一档。Web 用 `min-h-[80px]`,那是桌面的
- * 尺度 —— 照搬 80dp 会让六行占掉 480dp,在多数手机上把图例和详情卡片都挤出屏幕。
+ * 三个数必须一起缩放:只放大字号,三行文字就会在固定高度的格子里被裁掉;只放大格子,字还是
+ * 那么小,徒增空白。所以缩放是一个系数作用于一组尺寸,而不是三个各自可调的旋钮。
  *
- * EN: a cell's height. Seven columns leave under 50dp each on a phone while a cell carries three
- * lines — the date, the lunar label and a festival. 58dp fits those (13sp + 9sp + 9sp) without the
- * six-row grid overflowing the screen. The web's min-h-[80px] is a desktop measure; copying 80dp
- * would spend 480dp on the grid and push the legend and the day detail off most phones.
+ * 基准取「标准」档:格子 64dp,日期 14sp,农历与节日 10sp。Web 用的是 `min-h-[80px]` 加桌面字号,
+ * 那是鼠标+大屏的尺度;手机上七列每列不到 50dp 宽,照搬只会把六行网格撑出屏幕。
+ *
+ * EN: base sizes for a cell, multiplied by the "calendar text size" setting. The three must scale
+ * together: enlarging only the type clips three lines inside a fixed-height cell, while enlarging
+ * only the cell leaves the same small type with more blank around it — so this is one factor over a
+ * set of sizes rather than three independent knobs. The base is the "standard" step: a 64dp cell,
+ * a 14sp date, 10sp for the lunar label and the festival. The web's min-h-[80px] with desktop type
+ * is a mouse-and-large-screen measure; seven columns leave under 50dp each on a phone.
  */
-private val CELL_HEIGHT = 58.dp
+private const val BASE_CELL_HEIGHT = 64f
+private const val BASE_DAY_SP = 14f
+private const val BASE_SUB_SP = 10f
+private const val BASE_WEEKDAY_SP = 12f
 
 /**
  * 一天的格子:日期数字 + 农历(或节气)+ 节日。
@@ -324,6 +335,7 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
     val scheme = MaterialTheme.colorScheme
     val haptics = rememberHaptics(vm)
 
+    val scale = vm.calendarScale
     val info = vm.dayInfo(date)
     val lunar = remember(date) { Lunar.solar2Lunar(date.year, date.monthValue, date.dayOfMonth) }
     val isToday = date == vm.today
@@ -369,8 +381,8 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
     // would be a ring's width smaller than its neighbours and the row would look crooked.
     Box(
         modifier
-            .height(CELL_HEIGHT)
-            .then(if (isSelected) Modifier.selectionRing(shape) else Modifier)
+            .height((BASE_CELL_HEIGHT * scale).dp)
+            .then(if (isSelected) Modifier.selectionRing() else Modifier)
             .padding(2.dp),
     ) {
         Box(
@@ -401,8 +413,8 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
             ) {
                 Text(
                     date.dayOfMonth.toString(),
-                    fontSize = 13.sp,
-                    lineHeight = 16.sp,
+                    fontSize = (BASE_DAY_SP * scale).sp,
+                    lineHeight = (BASE_DAY_SP * scale * 1.2f).sp,
                     fontWeight = if (isToday) FontWeight.Bold else FontWeight.Medium,
                     color = dayColor,
                 )
@@ -410,8 +422,8 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
                 if (lunarLabel.isNotEmpty()) {
                     Text(
                         lunarLabel,
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
+                        fontSize = (BASE_SUB_SP * scale).sp,
+                        lineHeight = (BASE_SUB_SP * scale * 1.15f).sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         // 节气用品牌色:它是格子里唯一"天文事件"类的信息,与节日(纪念日)
@@ -429,8 +441,8 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
                 if (!observance.isNullOrEmpty()) {
                     Text(
                         observance,
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp,
+                        fontSize = (BASE_SUB_SP * scale).sp,
+                        lineHeight = (BASE_SUB_SP * scale * 1.15f).sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = subColor,
@@ -448,39 +460,92 @@ private fun DayCell(vm: CalendarViewModel, date: LocalDate, modifier: Modifier) 
  * 这里用同样的时长、同样四个颜色、同样的线性插值。为什么值得动:一个静态的高亮框在一片
  * 已经有绿红黄底色的格子里很难被一眼找到,而"在动"是唯一不与任何底色抢注意力的区别方式。
  *
- * 关掉系统动画时退化为第一个颜色的静态描边(见 [rememberReduceMotion])—— 选中态仍然看得见,
- * 只是不动;把"选中"整个去掉才是错的。
+ * **这是本应用里唯一不遵守"系统已关闭动画"的动效**,是有意的例外,理由有三条:
+ *   1. 它不是装饰,是**选中态本身的表达**。静态降级后它只是一圈 2dp 描边,和"今天"那圈几乎
+ *      分不开 —— 于是"我点的是哪一天"这条信息就丢了。降级不该以丢信息为代价。
+ *   2. 「移除动画」针对的是**位移**(前庭不适),而这里原地做的是颜色渐变,不移动任何东西。
+ *      本应用所有**会动位置**的地方(翻页、翻月、详情展开、自动滚动)仍然照常遵守该设置。
+ *   3. Web 端就是无条件循环的,而"两端一致"是这个项目的第一原则。
  *
- * EN: the colour-cycling ring on the selected day. The web cycles a box-shadow through chart-1…4
- * over 1.1s with CSS keyframes; this uses the same duration, the same four colours and the same
- * linear interpolation. Motion earns its place here: a static highlight is hard to spot among
- * cells that already carry green, red and yellow fills, and moving is the one distinction that
- * competes with none of them. With system animations off it degrades to a static ring in the first
- * colour — the selection stays visible, it just does not move; dropping the selection entirely
- * would be the wrong answer.
+ * 实测过的后果:在把动画缩放设为 0 的机器上(不少国产 ROM 出厂如此,也有人手动关),原来的
+ * 降级让用户看到的是一个"没有这个功能"的应用 —— 这正是这次改动的起因。
+ *
+ * EN: the colour-cycling ring on the selected day — the same 1.1s, the same four colours and the
+ * same linear interpolation as the web's CSS keyframes.
+ *
+ * THIS IS THE ONE PIECE OF MOTION IN THE APP THAT IGNORES "animations are switched off", and the
+ * exception is deliberate: (1) it is not decoration but the expression of selection itself — the
+ * static fallback was a 2dp ring barely distinguishable from today's, losing the answer to "which
+ * day did I tap"; a degradation must not cost information. (2) "Remove animations" targets MOVEMENT
+ * and the vestibular discomfort it causes, while this fades colour in place and moves nothing;
+ * everything here that does move (page and month transitions, the detail card, the auto-scroll)
+ * still honours the setting. (3) The web cycles unconditionally, and agreeing with the web is this
+ * project's first principle. Measured consequence: on a device with the animator scale at 0 — how
+ * several Chinese ROMs ship, and what some people choose — the fallback made the app look like it
+ * simply lacked the feature. That is what prompted this change.
  */
 @Composable
-private fun Modifier.selectionRing(shape: RoundedCornerShape): Modifier {
+private fun Modifier.selectionRing(): Modifier {
     val colors = LocalCalendarPalette.current.ring
-    if (rememberReduceMotion()) return this.border(2.dp, colors.first(), shape)
-    val transition = rememberInfiniteTransition(label = "ring")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = colors.size.toFloat(),
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1100, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "ring-phase",
-    )
-    val index = phase.toInt().coerceIn(0, colors.size - 1)
-    val color = lerp(
-        colors[index],
-        colors[(index + 1) % colors.size],
-        phase - index,
-    )
-    return this.border(2.dp, color, shape)
+    val density = LocalDensity.current
+    val stroke = with(density) { RING_WIDTH.toPx() }
+    val radius = with(density) { RING_RADIUS.toPx() }
+
+    /*
+     * 相位自己按帧时钟推,**不用 `animateFloat` + `infiniteRepeatable`**。
+     *
+     * 原因是实测出来的:Compose 的动画时长会被系统的「动画程序时长缩放」整体相乘,而那个值为 0
+     * 时(不少国产 ROM 出厂即是 0,开发者选项里也能关),任何 tween 都会在第一帧直接跑到终点 ——
+     * 于是这圈彩边永远停在同一个颜色上,看起来就是"这个功能没做"。这不是我们的 reduceMotion
+     * 判断造成的(那条已经去掉了),是 Compose 动画系统自己遵守了那个设置。
+     *
+     * `withFrameNanos` 拿到的是 Choreographer 的真实帧时间,不经过任何缩放,所以这段循环在
+     * 任何设置下都照常走。代价只是自己算一下相位:一个取模,没有状态机。
+     *
+     * 写在 `drawBehind` 里而不是 `border(color)`:相位在**绘制阶段**被读取,于是每帧只重绘这一个
+     * 格子,不触发重组。用 border 的话每帧都要重组这个格子的整棵子树 —— 一样能看,但那是白花的。
+     *
+     * EN: the phase is driven off the frame clock rather than animateFloat + infiniteRepeatable,
+     * and that is a measured decision: Compose multiplies every animation duration by the system's
+     * "animator duration scale", and when that is 0 — how several Chinese ROMs ship, and what
+     * developer options can set — any tween jumps to its end on the first frame, leaving this ring
+     * frozen on one colour and looking like an unimplemented feature. That is Compose's animation
+     * system honouring the setting, not our own reduce-motion check (which this no longer consults).
+     * withFrameNanos delivers Choreographer's real frame time, unscaled, so this loop runs under any
+     * setting; the only cost is computing the phase, which is one modulo.
+     * It lives in drawBehind rather than border(color) so the phase is read in the DRAW phase: each
+     * frame repaints this one cell instead of recomposing its whole subtree.
+     */
+    val phase = remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(Unit) {
+        var startNanos = 0L
+        while (true) {
+            withFrameNanos { frameNanos ->
+                if (startNanos == 0L) startNanos = frameNanos
+                val elapsedMs = (frameNanos - startNanos) / 1_000_000L
+                phase.floatValue = (elapsedMs % RING_CYCLE_MS) / RING_CYCLE_MS.toFloat() * colors.size
+            }
+        }
+    }
+
+    return this.drawBehind {
+        val p = phase.floatValue
+        val index = p.toInt().coerceIn(0, colors.size - 1)
+        val color = lerp(colors[index], colors[(index + 1) % colors.size], p - index)
+        drawRoundRect(
+            color = color,
+            topLeft = Offset(stroke / 2f, stroke / 2f),
+            size = Size(size.width - stroke, size.height - stroke),
+            cornerRadius = CornerRadius(radius, radius),
+            style = Stroke(width = stroke),
+        )
+    }
 }
+
+/** 彩边的线宽、圆角与一圈的时长(1.1s,与 Web 的 `@keyframes ring-rainbow` 相同)。 */
+private val RING_WIDTH = 2.dp
+private val RING_RADIUS = 9.dp
+private const val RING_CYCLE_MS = 1100L
 
 /** 给读屏软件的一句话描述。 */
 private fun cellDescription(

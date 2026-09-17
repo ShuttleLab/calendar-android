@@ -28,6 +28,26 @@ object Prefs {
      */
     const val KEY_HAPTICS = "haptics"
 
+    /**
+     * 日历文字大小,存的是缩放系数("0.85" / "1.0" / "1.15" / "1.3"),默认 1.0。
+     *
+     * 为什么是应用内设置而不是跟随系统字体大小:系统那一档会**同时**放大所有文字,而日历格子
+     * 的约束是七列固定宽度 —— 放大到某一档,格子里的三行就装不下了。这里缩放的是一组一起变的
+     * 尺寸(格子高度 + 日期 + 农历/节日),所以放大后仍然装得下。系统字体大小对界面其余部分
+     * (设置页、详情卡)照常生效,那些地方没有这个约束。
+     *
+     * EN: the calendar's text size, stored as a scale factor, default 1.0. An in-app setting rather
+     * than the system font size because the system one enlarges everything at once, while a cell is
+     * constrained by seven fixed-width columns: past some step, its three lines no longer fit. This
+     * factor scales a SET of sizes together (cell height, date, lunar label) so the content keeps
+     * fitting. The system font size still applies to the rest of the UI — settings, the detail card —
+     * which carries no such constraint.
+     */
+    const val KEY_CALENDAR_SCALE = "calendar_scale"
+
+    /** 可选的档位:小 / 标准 / 大 / 特大。 */
+    val CALENDAR_SCALES = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+
     private fun sp(ctx: Context) = ctx.getSharedPreferences(NAME, Context.MODE_PRIVATE)
 
     fun get(ctx: Context, key: String, def: String = ""): String =
@@ -47,6 +67,13 @@ object Prefs {
     fun haptics(ctx: Context): Boolean = get(ctx, KEY_HAPTICS) != "0"
 
     fun setHaptics(ctx: Context, on: Boolean) = put(ctx, KEY_HAPTICS, if (on) "1" else "0")
+
+    /** 日历文字大小;未设置或存了脏值时回到 1.0。 */
+    fun calendarScale(ctx: Context): Float =
+        get(ctx, KEY_CALENDAR_SCALE).toFloatOrNull()?.takeIf { it in CALENDAR_SCALES } ?: 1.0f
+
+    fun setCalendarScale(ctx: Context, scale: Float) =
+        put(ctx, KEY_CALENDAR_SCALE, scale.toString())
 
     fun setDynamicColor(ctx: Context, on: Boolean) =
         put(ctx, KEY_DYNAMIC_COLOR, if (on) "1" else "0")

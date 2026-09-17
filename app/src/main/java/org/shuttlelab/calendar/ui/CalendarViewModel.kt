@@ -33,6 +33,10 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     var hapticsEnabled by mutableStateOf(Prefs.haptics(ctx))
         private set
 
+    /** 日历文字大小的缩放系数;格子高度与三行字号一起乘它(见 ui/MonthCalendar.kt)。 */
+    var calendarScale by mutableStateOf(Prefs.calendarScale(ctx))
+        private set
+
     fun setTheme(t: String) {
         themePref = t
         Prefs.put(ctx, Prefs.KEY_THEME, t)
@@ -46,6 +50,21 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     fun setHaptics(on: Boolean) {
         hapticsEnabled = on
         Prefs.setHaptics(ctx, on)
+    }
+
+    /**
+     * 改日历文字大小。
+     *
+     * 函数名不叫 `setCalendarScale`:属性 `calendarScale` 带 `private set`,它自己就会生成一个
+     * JVM 上的 `setCalendarScale(F)V`,同名函数会**编译期**撞签名。同一个类里另外三个
+     * (`themePref`/`setTheme` 等)恰好名字不同才没撞上。
+     * EN: not named setCalendarScale — the property's `private set` already generates that JVM
+     * signature, and a same-named function is a compile-time clash. The other three in this class
+     * happen to differ in name.
+     */
+    fun setCalendarTextSize(scale: Float) {
+        calendarScale = scale
+        Prefs.setCalendarScale(ctx, scale)
     }
 
     fun setLang(lang: String) = Lang.set(ctx, lang)
