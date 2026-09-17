@@ -103,10 +103,19 @@ fun MonthCalendar(vm: CalendarViewModel) {
                     contentDescription = Lang.t("Previous month", "上月"),
                 )
             }
+            // 标题本身也是选择器的入口。顶栏那个图标是主入口,而"点年月切月份"是日历应用的
+            // 通用习惯(系统日历、Google 日历都如此),顺手支持一下,让找不到图标的人也能到达。
+            // EN: the title is also an entry to the picker. The app-bar icon is the primary one,
+            // but tapping the year-month to change month is a calendar convention, so supporting it
+            // gives a second route for anyone who does not spot the icon.
             Text(
                 monthTitle(month),
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = haptics.clicking { vm.openMonthPicker() })
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
             )
             OutlinedIconButton(onClick = haptics.selecting { vm.nextMonth() }) {
                 Icon(

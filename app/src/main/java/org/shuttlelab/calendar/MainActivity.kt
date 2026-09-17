@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,6 +45,7 @@ import org.shuttlelab.calendar.data.Lang
 import org.shuttlelab.calendar.ui.AboutScreen
 import org.shuttlelab.calendar.ui.CalendarScreen
 import org.shuttlelab.calendar.ui.CalendarViewModel
+import org.shuttlelab.calendar.ui.MonthPickerSheet
 import org.shuttlelab.calendar.ui.Motion
 import org.shuttlelab.calendar.ui.SettingsScreen
 import org.shuttlelab.calendar.ui.rememberHaptics
@@ -239,6 +241,18 @@ private fun CalendarHome(vm: CalendarViewModel) {
                     )
                 },
                 actions = {
+                    // 月份选择器。常驻,不像「今天」那样按状态隐藏 —— 它在任何月份上都有用,
+                    // 而且一个位置会变的入口比一个多余的图标更让人迷惑。
+                    // EN: the month picker, always present rather than state-dependent like Today:
+                    // it is useful on any month, and an entry point that moves is more confusing
+                    // than one extra icon.
+                    IconButton(onClick = haptics.clicking { vm.openMonthPicker() }) {
+                        Icon(
+                            Icons.Filled.CalendarMonth,
+                            contentDescription = Lang.t("Jump to month", "选择月份"),
+                            tint = brandPrimary(),
+                        )
+                    }
                     // 已经在今天时隐藏:一个点了什么也不变的按钮比没有按钮更糟 —— 用户会以为
                     // 它坏了。用 AnimatedContent 的兄弟 AnimatedVisibility 会让设置图标左右跳动,
                     // 所以这里直接按条件出现/消失,而设置图标永远钉在最右。
@@ -270,6 +284,10 @@ private fun CalendarHome(vm: CalendarViewModel) {
     ) { inner ->
         Box(Modifier.fillMaxSize().padding(inner)) {
             CalendarScreen(vm)
+            // 选择器是模态底部面板,挂在内容之上;它自己判断要不要显示。
+            // EN: the picker is a modal bottom sheet over the content and decides for itself
+            // whether to show.
+            MonthPickerSheet(vm)
         }
     }
 }

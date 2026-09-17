@@ -144,6 +144,40 @@ class CalendarViewModel(app: Application) : AndroidViewModel(app) {
     var monthDelta by mutableStateOf(0)
         private set
 
+    /**
+     * 月份选择器是否展开。放在 ViewModel 而不是页面里的 `remember`:顶栏的按钮在
+     * `MainActivity`,而选择器要盖在日历页上,两处不在同一个组合子树里,用本地状态传不过去。
+     * EN: whether the month picker is open. In the ViewModel rather than a screen-local `remember`
+     * because the button lives in MainActivity's app bar while the sheet overlays the calendar page
+     * — two different subtrees, which local state cannot bridge.
+     */
+    var monthPickerOpen by mutableStateOf(false)
+        private set
+
+    fun openMonthPicker() {
+        monthPickerOpen = true
+    }
+
+    fun closeMonthPicker() {
+        monthPickerOpen = false
+    }
+
+    /**
+     * 跳到指定月份并关闭选择器。
+     *
+     * **不清除已选中的那一天** —— 与点箭头翻月的行为一致(Web 也如此)。跳月之后详情卡仍然停在
+     * 原来那一天上,这是有用的:跳去看另一个月的同时,手里那天的信息不该被顺手扔掉。
+     *
+     * EN: jump to a month and close the picker. The selected day is NOT cleared, matching what the
+     * arrows do (and the web). The detail card stays on that day, which is useful: going to look at
+     * another month should not throw away the day you were holding.
+     */
+    fun jumpToMonth(target: YearMonth) {
+        monthDelta = target.compareTo(viewMonth).coerceIn(-1, 1)
+        viewMonth = target
+        monthPickerOpen = false
+    }
+
     fun prevMonth() {
         monthDelta = -1
         viewMonth = viewMonth.minusMonths(1)

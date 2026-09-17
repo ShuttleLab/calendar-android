@@ -40,6 +40,21 @@ adb logcat -c && adb shell am start -n org.shuttlelab.calendar/.MainActivity
 adb logcat -d -s AndroidRuntime:E   # 崩溃栈
 ```
 
+真机不在手边(或锁着屏,adb 解不开)时用模拟器,AVD 已建好,名字 `cal36`(Pixel 6 / android-36):
+
+```sh
+emulator -avd cal36 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect &
+adb -s emulator-5554 wait-for-device
+adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s emulator-5554 exec-out screencap -p > /tmp/shot.png   # 无窗口模式下靠截图看界面
+```
+
+**建 AVD 时有个坑**:homebrew 装的 `avdmanager`(在 `/opt/homebrew/bin`)认的是它自己的 SDK 根
+`/opt/homebrew/share/android-commandlinetools`,而系统镜像装在 `~/Library/Android/sdk`,于是它会
+报 `Package path is not valid ... null` —— 看起来像镜像没装好,其实是两个 SDK 根。用
+`$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager` 那一份即可。另外别忘了 `-d pixel_6`:不指定
+设备型号会得到一个 320x640 的默认屏,日历在那上面根本铺不开。
+
 - CI 会先跑单元测试再打包,测试失败就不出包;另有一步断言"用例数 ≥ 10",防止测试没被发现
   却依然绿灯。
 - 不需要任何密钥或配置文件即可构建 debug 包(与 secretary 不同,这里没有 Firebase)。
