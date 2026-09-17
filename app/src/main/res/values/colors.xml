@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 冷启动窗口背景(浅色):与 ui/theme/Theme.kt 的 LightBg 一致。 -->
+    <!-- EN: cold-start window background (light), matching LightBg in Theme.kt. -->
+    <color name="launch_background">#FDFBF7</color>
+</resources>

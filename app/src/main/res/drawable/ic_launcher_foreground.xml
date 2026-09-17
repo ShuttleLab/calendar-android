@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标前景:一页日历 —— 圆角方框、两个挂环、表头分隔线,中间一格被标出来。
+
+  安全区:108x108 画布上只有中心**直径 66dp**(半径 33)的圆保证不被任何厂商遮罩裁掉。这里
+  按**描边外沿**算过,不是按路径中线算的(差半个笔宽,而它恰好是够不够的那半个):方框路径
+  占 35..73,加半个笔宽后四角距中心 30.4;挂环顶端加圆头后在 y=24.5,距中心 31.1。都在安全区内
+  —— 圆形、方圆、水滴任何遮罩都切不到内容。
+
+  只说一件事:它是一页日历,中间那一格是"某一天"。刻意不画数字、不画农历字样 —— 48dp 的桌面
+  尺寸下任何字都会糊成一团,而"被标出来的那一格"恰好就是这个应用做的事(标出放假与补班)。
+  中间那格用**实心填充**而不是再一个描边框:小尺寸下两层描边会并成一块。
+
+  用描边而非填充路径,笔重只有一个数字可调,单色版(monochrome)也直接成立。
+
+  EN: adaptive-icon foreground — a calendar page: a rounded frame, two hangers, a header rule, and
+  one cell marked. Safe zone: only the centre 66dp circle (radius 33) of the 108x108 canvas is
+  guaranteed against any vendor mask, and the margins here are measured to the STROKE'S OUTER EDGE
+  rather than the path centreline — half a stroke width apart, which is exactly the half that
+  decides it: the frame path spans 35..73, putting its corners 30.4 from the centre once the stroke
+  is added, and the hangers' round caps top out at y=24.5, 31.1 out. No round, squircle or teardrop
+  mask can clip it.
+  One idea only: a calendar page with one day marked. Deliberately no digits and no Chinese
+  characters — at the 48dp launcher size any glyph turns to mush, and "the cell that is marked" is
+  exactly what this app does (marking days off and make-up workdays). That cell is SOLID rather than
+  another outline, because two nested strokes merge at small sizes. Strokes rather than filled paths
+  keep the weight to a single number and make the monochrome variant work as-is.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 挂环 -->
+    <path
+        android:pathData="M45,28 L45,42"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M63,28 L63,42"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round" />
+
+    <!-- 页框 -->
+    <path
+        android:pathData="M41,35 h26 a6,6 0 0 1 6,6 v26 a6,6 0 0 1 -6,6 h-26 a6,6 0 0 1 -6,-6 v-26 a6,6 0 0 1 6,-6 z"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineJoin="round" />
+
+    <!-- 表头分隔线 -->
+    <path
+        android:pathData="M35,49 L73,49"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5" />
+
+    <!-- 被标出来的那一天 -->
+    <path
+        android:pathData="M49,56 h10 a3,3 0 0 1 3,3 v7 a3,3 0 0 1 -3,3 h-10 a3,3 0 0 1 -3,-3 v-7 a3,3 0 0 1 3,-3 z"
+        android:fillColor="#FFFFFF" />
+</vector>

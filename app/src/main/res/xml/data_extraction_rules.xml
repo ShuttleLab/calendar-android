@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份/迁移规则:什么都不带走。
+
+  本应用本地只有两类数据:界面偏好(语言、主题、触感)和一份公开节假日数据的缓存。前者在新机上
+  重新选一次是三秒钟的事,后者联网即得 —— 没有任何值得跨设备搬运的东西。而 Android Auto Backup
+  默认会把整个 SharedPreferences 上传到用户的云端硬盘,那是在没有任何收益的情况下把数据送出设备。
+  关于页里写的是"你的设置只存在本机",这份规则是那句话的实现,不是装饰。
+
+  allowBackup="false" 关掉云备份;Android 12+ 的设备到设备直传由这份规则关掉,两者缺一不可。
+
+  EN: back up nothing. The only local data is UI preferences (language, theme, haptics) and a cache
+  of public holiday data: the former takes three seconds to re-pick on a new phone and the latter
+  arrives with the network, so nothing here is worth carrying between devices — while Android Auto
+  Backup would upload the whole SharedPreferences file to the user's cloud storage, sending data off
+  the device for no benefit at all. The About page states that settings stay on the device; this file
+  is that sentence's implementation, not decoration. allowBackup="false" covers cloud backup and this
+  file covers Android 12+ device-to-device transfer. Both are needed.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 中文系统上的应用名;英文(默认)在 values/strings.xml。见那一份里的说明。 -->
+    <!-- EN: the launcher label on a Chinese system; the default is in values/strings.xml. -->
+    <string name="app_name">日历穿梭机</string>
+</resources>

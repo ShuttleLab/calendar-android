@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose 应用:配色完全由 Compose 侧定义(ui/theme/Theme.kt),这里只负责**冷启动那一瞬间**
+      系统画出的窗口背景 —— Activity 起来之前 Compose 还没有机会上色。
+
+      两件事说明白:
+        1. 它只跟随**系统**夜间模式(values-night),跟不了应用内的"强制深色/强制浅色"偏好 ——
+           那个偏好存在 SharedPreferences 里,而窗口背景在我们的代码跑起来之前就已经画出去了。
+           系统浅色 + 应用强制深色的组合仍会闪一下,无法消除,只能让最常见的情形(两者一致)不闪。
+        2. 状态栏图标的明暗**不在这里设**:本主题固定 Light,windowLightStatusBar 默认 false
+           (= 白色图标),而应用的深浅由运行时偏好决定,XML 猜不到。交给 Theme.kt 运行时设置。
+
+      EN: colours live entirely in Compose (ui/theme/Theme.kt); this theme only supplies the window
+      background painted during cold start, before the activity — and therefore Compose — can colour
+      anything. Two caveats: (1) it follows the SYSTEM night mode only, not the app's forced
+      light/dark preference, which lives in SharedPreferences and is unreadable before our code runs;
+      system-light + app-forced-dark still flashes, which cannot be avoided, only kept to the
+      uncommon case. (2) Status-bar icon appearance is NOT set here: this theme is fixed Light and
+      windowLightStatusBar defaults to false (white icons) while the app's lightness is a runtime
+      preference the XML cannot know — Theme.kt sets it at runtime instead.
+    -->
+    <style name="Theme.CalendarShuttle" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+    </style>
+</resources>

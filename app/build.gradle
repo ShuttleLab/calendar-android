@@ -1,0 +1,92 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+android {
+    namespace 'org.shuttlelab.calendar'
+    compileSdk 36
+
+    // 版本号由 CI 从 git tag 注入(见 .github/workflows/release.yml);
+    // 本地 / debug 构建没有这两个环境变量时回退到占位版本,保证能编译。
+    // EN: the version is injected by CI from the git tag; local/debug builds fall
+    // back to a placeholder so they still compile.
+    def ciVersionName = System.getenv("VERSION_NAME")
+    def ciVersionCode = System.getenv("VERSION_CODE")
+
+    defaultConfig {
+        applicationId "org.shuttlelab.calendar"
+        minSdk 26
+        targetSdk 36
+        versionCode ciVersionCode ? ciVersionCode.toInteger() : 1
+        versionName ciVersionName ?: "0.0.0-dev"
+    }
+
+    // 发布签名:CI 通过环境变量注入;本地/无密钥时回退 debug 签名,让 assembleRelease 不报错。
+    // release.yml 里**缺少密钥直接失败**,所以这条回退只作用于本地。
+    // EN: release signing comes from CI env vars; without a key it falls back to the
+    // debug signing config so assembleRelease still runs locally. release.yml fails
+    // hard when the key is missing, so this fallback never reaches a published APK.
+    def keystoreFile = System.getenv("KEYSTORE_FILE")
+    signingConfigs {
+        release {
+            if (keystoreFile != null) {
+                storeFile file(keystoreFile)
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig keystoreFile != null ? signingConfigs.release : signingConfigs.debug
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+    buildFeatures {
+        compose true
+        buildConfig = true   // BuildConfig.VERSION_NAME for the About card
+    }
+}
+
+dependencies {
+    // Compose M3
+    implementation platform('androidx.compose:compose-bom:2025.06.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.activity:activity-compose:1.9.3'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7'
+
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+
+    // 刻意**没有**的依赖:
+    //   - 网络库:节假日数据只有一个 GET,HttpURLConnection 三十行就够(见 data/HolidayRepo.kt)
+    //   - JSON 库:数据源本身是 JS 文件,要正则解析,序列化库帮不上
+    //   - 农历库:唯一与 Web 端口径一致的做法是移植 Web 用的同一套算法(见 data/Lunar.kt)
+    //   - Room/DataStore/Hilt/Navigation:一个日历页 + 设置页,SharedPreferences 与
+    //     手写导航栈足够,加库只会让构建变慢、依赖变多
+    // EN: deliberately absent — an HTTP library (one GET), a JSON library (the source is a
+    // JS file needing regex), a lunar library (parity with the web means porting the web's
+    // own algorithm) and Room/DataStore/Hilt/Navigation (one calendar page and a settings
+    // page: SharedPreferences and a hand-rolled back stack are enough).
+
+    // 单元测试:只覆盖不碰 Android framework 的纯逻辑 —— 农历换算与节假日解析,
+    // 正是最容易算错、又最难在设备上肉眼发现的部分。
+    // EN: unit tests cover only the pure logic that never touches the framework — lunar
+    // conversion and holiday parsing, the parts most easily got wrong and hardest to spot by eye.
+    testImplementation 'junit:junit:4.13.2'
+}

@@ -1,0 +1,21 @@
+.claude/
+
+# Build output
+/build
+/app/build
+.gradle
+local.properties
+.idea/
+*.iml
+.DS_Store
+.kotlin/
+
+# 签名材料 —— 永不入库(CI 从 Secrets 注入,见 .github/workflows/release.yml)
+# EN: signing material — never committed; CI injects it from repo secrets.
+*.jks
+*.keystore
+*.jks.b64
+key.properties
+
+# Secrets
+*.env

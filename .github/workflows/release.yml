@@ -1,0 +1,136 @@
+name: Release
+
+# 打 tag(如 v1.0.0)即触发:构建签名的 release APK/AAB 并发布到 GitHub Releases。
+# 手动触发(workflow_dispatch)不可用 —— GITHUB_REF_NAME 在手动触发时是分支名而非 tag,
+# 版本派生步骤会直接失败。
+# EN: tag-triggered. workflow_dispatch is deliberately absent: GITHUB_REF_NAME would be a branch
+# name rather than a tag and the version step would fail outright.
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write   # 创建 Release 需要写权限
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # 显式列出要装的 SDK 组件。
+      #
+      # 不能用这个 action 的默认值:它默认会装 `tools`,而那个包早已从 SDK 仓库下架,
+      # sdkmanager 报 "Failed to find package 'tools'" 并以非零码退出 —— 首次 CI 就是这么红的,
+      # 而失败信息埋在几百行 MIPS 许可协议后面,看起来像许可问题,其实不是。
+      #
+      # build-tools 取 35.0.0:那是 AGP 8.9.x 的默认版本(与 compileSdk 36 无关,两者不是一回事)。
+      # 版本对不上时 AGP 会自己下载,但显式列出来构建更快、也更可复现。
+      #
+      # EN: list the SDK packages explicitly. The action's default installs `tools`, a package long
+      # since removed from the SDK repository, so sdkmanager exits non-zero with "Failed to find
+      # package 'tools'" — which is how the very first CI run failed, with the real error buried
+      # under several hundred lines of MIPS licence text that make it look like a licensing problem.
+      # build-tools 35.0.0 is AGP 8.9.x's default (unrelated to compileSdk 36 — they are different
+      # things). AGP would download a missing one itself, but naming it is faster and reproducible.
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-36 build-tools;35.0.0'
+
+      # 版本号从 tag 算出,不改 build.gradle:
+      #   v1.2.3 -> versionName=1.2.3, versionCode=1*10000+2*100+3=10203
+      - name: Derive version from tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"           # 例:v1.2.3
+          VNAME="${TAG#v}"                   # 1.2.3
+          if ! echo "$VNAME" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::tag 必须是 vMAJOR.MINOR.PATCH(如 v1.2.3),当前为 '$TAG'"
+            exit 1
+          fi
+          IFS=. read -r MA MI PA <<< "$VNAME"
+          VCODE=$((MA*10000 + MI*100 + PA))
+          echo "VERSION_NAME=$VNAME"  >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$VCODE" >> "$GITHUB_ENV"
+          echo "versionName=$VNAME  versionCode=$VCODE"
+
+      # 发布包必须**正式签名**:缺密钥直接失败,绝不回退 debug 签名。
+      # 回退会产出一个签名与之前版本不同的 APK —— 用户装不上(签名不匹配),而且要修只能让
+      # 所有人卸载重装。宁可这一步红。
+      # EN: a release must be properly signed; a missing key fails the job rather than falling back
+      # to the debug signature. That fallback would ship an APK signed with a different key, which
+      # existing users cannot install over their copy, and the only fix would be asking everyone to
+      # uninstall and reinstall. Better to go red here.
+      - name: Require & decode keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::KEYSTORE_BASE64 未设置 —— release 必须正式签名。请在仓库 Secrets 配置后重试。"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+
+      # 发布前照样跑测试:tag 可能打在没进过 PR 的提交上。
+      - name: Unit tests
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest --no-daemon
+
+      # "测试通过"和"测试跑过"不是一回事。
+      #
+      # 测试类没被发现、资源夹具没进包、过滤条件写错 —— 这几种情况下 Gradle 照样报 BUILD
+      # SUCCESSFUL,因为它确实没有失败的测试。那时 CI 是绿的,而它什么也没验证,这比红更危险:
+      # 从此每一次绿都不代表任何事情。所以这里数一遍真正执行的用例数。
+      #
+      # EN: "the tests passed" and "the tests ran" are different claims. If the test classes are not
+      # discovered, the fixture resource is missing from the test runtime, or a filter is wrong,
+      # Gradle still reports BUILD SUCCESSFUL — it genuinely had no failing tests. CI is then green
+      # while verifying nothing, which is worse than red: every green afterwards means nothing. So
+      # the executed cases are counted.
+      - name: Assert the tests actually ran
+        run: |
+          RESULTS=app/build/test-results/testDebugUnitTest
+          TOTAL=$(grep -ho 'tests="[0-9]*"' "$RESULTS"/*.xml 2>/dev/null \
+            | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          echo "executed test cases: $TOTAL"
+          if [ "$TOTAL" -lt 10 ]; then
+            echo "::error::只执行了 $TOTAL 个用例(期望 ≥ 10)—— 测试类或夹具很可能没有被发现。"
+            exit 1
+          fi
+
+      - name: Build signed release APK + AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          # APK = GitHub 直接安装;AAB = 上传 Google Play(如需上架)
+          ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - name: Rename artifacts
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "CalendarShuttle-${{ github.ref_name }}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "CalendarShuttle-${{ github.ref_name }}.aab"
+          # 固定名副本:官网可用 /releases/latest/download/CalendarShuttle.apk 直连下载最新版
+          cp app/build/outputs/apk/release/app-release.apk "CalendarShuttle.apk"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            CalendarShuttle-${{ github.ref_name }}.apk
+            CalendarShuttle-${{ github.ref_name }}.aab
+            CalendarShuttle.apk
+          generate_release_notes: true

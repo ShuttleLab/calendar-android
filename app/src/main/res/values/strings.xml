@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      界面文案一律走 data/Lang.kt 的 t(en, zh)(语言是应用内偏好,可随时切换);strings.xml 只留
+      启动器上的应用名 —— 那一条系统在应用启动前就要用,读不到我们的偏好,只能交给资源限定符。
+
+      所以这里**只有它**按 values/ + values-zh/ 分两份:默认(英文系统)显示 Calendar Shuttle,
+      中文系统显示 日历穿梭机。这与 Lang.init() 的"没设置过就跟随系统语言"是同一个规则,
+      桌面图标下的名字和打开后看到的语言因此是一致的。
+
+      EN: UI strings all go through data/Lang.kt's t(en, zh) since the language is an in-app
+      preference; strings.xml holds only the launcher label, which the system needs before the app
+      runs and therefore before that preference is readable — so it is the one string that must use
+      resource qualifiers. Default (English system) reads Calendar Shuttle, a Chinese system reads
+      日历穿梭机: the same rule as Lang.init()'s follow-the-system default, so the name under the
+      icon and the language inside the app agree.
+    -->
+    <string name="app_name">Calendar Shuttle</string>
+</resources>

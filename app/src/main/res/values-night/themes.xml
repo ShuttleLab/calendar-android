@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色模式:避免启动时闪浅色背景(与 Compose DarkBg 对齐)。 -->
+    <style name="Theme.CalendarShuttle" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+    </style>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 冷启动窗口背景(深色):与 ui/theme/Theme.kt 的 DarkBg 一致。 -->
+    <!-- EN: cold-start window background (dark), matching DarkBg in Theme.kt. -->
+    <color name="launch_background">#111110</color>
+</resources>
